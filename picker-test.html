@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Folder save test</title>
+<style>
+body{font:15px/1.5 system-ui,sans-serif;max-width:720px;margin:24px auto;padding:0 16px;color:#111;background:#fff}
+h1{font-size:22px;margin:0 0 4px}
+.muted{color:#555}
+button{font:inherit;padding:10px 14px;border-radius:8px;border:1px solid #1a56db;background:#1a56db;color:#fff;cursor:pointer;margin:6px 8px 6px 0}
+button.alt{background:#fff;color:#1a56db}
+.box{border:1px solid #ccc;border-radius:10px;padding:12px 14px;margin:14px 0}
+.row{display:flex;gap:8px;padding:3px 0}
+.tag{min-width:54px;font-weight:700}
+.ok{color:#0a7a3b}.bad{color:#b42318}.info{color:#555}
+pre{white-space:pre-wrap;word-break:break-word;background:#f4f4f4;padding:10px;border-radius:8px;font-size:13px}
+</style>
+</head>
+<body>
+<h1>Folder save test</h1>
+<p class="muted">Press the buttons one at a time. Each step shows PASS or FAIL. Nothing from your payroll is used or sent anywhere.</p>
+
+<div class="box"><b>Your browser</b><div id="env"></div></div>
+
+<div class="box">
+  <b>Test 1: save into a folder (what PAYSLIP (ZIP) tries first)</b>
+  <p class="muted" style="margin:4px 0">Pick a NEW empty folder, for example one you create on the Desktop called "test".</p>
+  <button id="b1">Run test 1: choose a folder</button>
+  <div id="r1"></div>
+</div>
+
+<div class="box">
+  <b>Test 2: "Choose where to save" window (the ZIP fallback)</b>
+  <button id="b2" class="alt">Run test 2: save a file</button>
+  <div id="r2"></div>
+</div>
+
+<div class="box">
+  <b>Test 3: normal download (goes to your Downloads folder)</b>
+  <button id="b3" class="alt">Run test 3: download a file</button>
+  <div id="r3"></div>
+</div>
+
+<div class="box">
+  <b>Copy the results and send them to me</b><br>
+  <button id="cp" class="alt">Copy results</button> <span id="cpm" class="muted"></span>
+  <pre id="all">No results yet.</pre>
+</div>
+
+<script>
+(function(){
+  var LOG=[];
+  function $(id){return document.getElementById(id)}
+  function say(box,status,text){
+    var d=document.createElement('div');d.className='row';
+    var t=document.createElement('span');t.className='tag '+(status==='PASS'?'ok':status==='FAIL'?'bad':'info');t.textContent=status;
+    var m=document.createElement('span');m.textContent=text;d.appendChild(t);d.appendChild(m);$(box).appendChild(d);
+    LOG.push('['+box+'] '+status+' - '+text);$('all').textContent=LOG.join('\n');
+  }
+  function err(e){return (e&&e.name?e.name:'Error')+(e&&e.message?': '+e.message:'')}
+  function reset(box){$(box).innerHTML='';LOG=LOG.filter(function(l){return l.indexOf('['+box+']')!==0});$('all').textContent=LOG.join('\n')||'No results yet.'}
+
+  /* environment */
+  var env=[
+    ['Address',location.origin],
+    ['Secure page (https)',String(window.isSecureContext)],
+    ['Top-level page (not in a frame)',String(window.top===window)],
+    ['Folder picker available',String(typeof window.showDirectoryPicker==='function')],
+    ['Save-as picker available',String(typeof window.showSaveFilePicker==='function')],
+    ['Browser',navigator.userAgent]
+  ];
+  var envText=env.map(function(r){return r[0]+': '+r[1]}).join('\n');
+  $('env').innerHTML='';env.forEach(function(r){var d=document.createElement('div');d.textContent=r[0]+': '+r[1];$('env').appendChild(d)});
+  LOG.push('[env]\n'+envText);$('all').textContent=LOG.join('\n');
+
+  function makeJpg(){
+    return new Promise(function(res,rej){
+      try{var c=document.createElement('canvas');c.width=1200;c.height=1500;var x=c.getContext('2d');
+        x.fillStyle='#fff';x.fillRect(0,0,1200,1500);x.fillStyle='#000';x.font='40px sans-serif';x.fillText('Folder save test image',60,100);
+        for(var i=0;i<60;i++){x.fillStyle='hsl('+(i*6)+',60%,60%)';x.fillRect(60+(i%10)*100,160+Math.floor(i/10)*120,90,100)}
+        c.toBlob(function(b){b?res(b):rej(new Error('Could not make the test image'))},'image/jpeg',0.9)}catch(e){rej(e)}
+    });
+  }
+
+  /* Test 1 */
+  $('b1').onclick=async function(){
+    reset('r1');var dir;
+    if(typeof window.showDirectoryPicker!=='function'){say('r1','FAIL','This browser has no folder picker (use Chrome or Edge on a computer).');return}
+    try{say('r1','INFO','Opening the folder picker...');dir=await window.showDirectoryPicker({mode:'readwrite'});say('r1','PASS','Folder chosen: '+dir.name)}
+    catch(e){say('r1','FAIL','Folder picker: '+err(e));return}
+    try{var p=dir.requestPermission?await dir.requestPermission({mode:'readwrite'}):'granted';
+      if(p!=='granted'){say('r1','FAIL','Write permission was not granted ('+p+')');return}say('r1','PASS','Write permission granted')}
+    catch(e){say('r1','FAIL','Permission: '+err(e));return}
+    var sub;
+    try{sub=await dir.getDirectoryHandle('payslips-test',{create:true});say('r1','PASS','Created subfolder "payslips-test"')}
+    catch(e){say('r1','FAIL','Create subfolder: '+err(e));return}
+    try{var w=await(await sub.getFileHandle('note.txt',{create:true})).createWritable();await w.write('hello');await w.close();say('r1','PASS','Wrote note.txt')}
+    catch(e){say('r1','FAIL','Write text file: '+err(e));return}
+    try{var jpg=await makeJpg();var w2=await(await sub.getFileHandle('test-sheet.jpg',{create:true})).createWritable();await w2.write(jpg);await w2.close();
+      var back=await(await sub.getFileHandle('test-sheet.jpg')).getFile();
+      if(back.size===jpg.size)say('r1','PASS','Wrote test-sheet.jpg ('+jpg.size+' bytes) and read it back correctly');
+      else say('r1','FAIL','Image size mismatch: wrote '+jpg.size+', found '+back.size)}
+    catch(e){say('r1','FAIL','Write image: '+err(e));return}
+    say('r1','PASS','TEST 1 PASSED. Open the folder you chose and look for "payslips-test".');
+  };
+
+  /* Test 2 */
+  $('b2').onclick=async function(){
+    reset('r2');
+    if(typeof window.showSaveFilePicker!=='function'){say('r2','FAIL','This browser has no Save-as picker.');return}
+    var h;
+    try{say('r2','INFO','Opening the Save-as window...');h=await window.showSaveFilePicker({suggestedName:'test-payslips.zip',types:[{description:'ZIP file',accept:{'application/zip':['.zip']}}]});say('r2','PASS','Location chosen: '+h.name)}
+    catch(e){say('r2','FAIL','Save-as window: '+err(e));return}
+    try{var w=await h.createWritable();await w.write(new Blob(['test file, not a real zip']));await w.close();say('r2','PASS','TEST 2 PASSED. The file was saved where you chose.')}
+    catch(e){say('r2','FAIL','Write file: '+err(e))}
+  };
+
+  /* Test 3 */
+  $('b3').onclick=function(){
+    reset('r3');
+    try{var blob=new Blob(['test download'],{type:'text/plain'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='test-download.txt';a.rel='noopener';
+      document.body.appendChild(a);a.click();setTimeout(function(){a.remove();URL.revokeObjectURL(a.href)},1000);
+      say('r3','PASS','Download started. Check your Downloads folder for test-download.txt. If your browser asked where to save, that is a browser setting.')}
+    catch(e){say('r3','FAIL','Download: '+err(e))}
+  };
+
+  $('cp').onclick=function(){
+    var t=$('all').textContent;
+    (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(t):Promise.reject()).then(function(){$('cpm').textContent='Copied.'},function(){
+      var r=document.createRange();r.selectNodeContents($('all'));var s=getSelection();s.removeAllRanges();s.addRange(r);$('cpm').textContent='Select and copy the text below.'});
+  };
+})();
+</script>
+</body>
+</html>
